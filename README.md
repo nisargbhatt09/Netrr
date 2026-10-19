@@ -1,3 +1,5 @@
+<img width="729" height="773" alt=" -8" src="https://github.com/user-attachments/assets/07aa68df-703a-4114-b889-34d56579b806" />
+
 # Netrr
 
 An assistive wearable for blind and low-vision users. A camera captures the scene, computer vision and vision-language models interpret it, and the system speaks what matters: objects and their positions, safety hazards, readable text, currency, and who is in front of you.
