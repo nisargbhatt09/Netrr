@@ -3,6 +3,7 @@ import threading
 import requests
 import os
 import json
+from PIL import Image
 from .base import SmartGlasses
 
 class TextReader(SmartGlasses):
@@ -15,16 +16,16 @@ class TextReader(SmartGlasses):
         # API keys for OCR services
         self.google_vision_api_key = os.environ.get("GOOGLE_VISION_API_KEY", "YOUR_GOOGLE_VISION_API_KEY")
         
-        # Initialize Mistral client if available
-        if hasattr(self, 'mistral_client') and self.mistral_client is None:
-            mistral_api_key = self.get("mistral_api_key", os.environ.get("MISTRAL_API_KEY"))
-            if mistral_api_key and mistral_api_key != "YOUR_API_KEY_HERE":
+        # Initialize Gemini client if available
+        if hasattr(self, 'gemini_client') and self.gemini_client is None:
+            gemini_api_key = self.get("gemini_api_key", os.environ.get("GEMINI_API_KEY"))
+            if gemini_api_key and gemini_api_key != "YOUR_API_KEY_HERE":
                 try:
-                    from mistralai import Mistral
-                    self.mistral_client = Mistral(api_key=mistral_api_key)
+                    from google import genai
+                    self.gemini_client = genai.Client(api_key=gemini_api_key)
                 except (ImportError, Exception) as e:
-                    print(f"Error initializing Mistral client: {e}")
-                    self.mistral_client = None
+                    print(f"Error initializing Gemini client: {e}")
+                    self.gemini_client = None
         
         # Language settings
         self.source_language = 'en'  # Default source language
@@ -48,7 +49,7 @@ class TextReader(SmartGlasses):
         print("Text reader initialized (using cloud OCR)")
     
     def detect_text_with_cloud_ocr(self, image_path):
-        """Detect text using Google Cloud Vision API or Mistral if not available"""
+        """Detect text using Google Cloud Vision API or Gemini if not available"""
         # First try with Google Cloud Vision API
         if self.google_vision_api_key != "YOUR_GOOGLE_VISION_API_KEY":
             try:
@@ -90,60 +91,49 @@ class TextReader(SmartGlasses):
                     
             except Exception as e:
                 print(f"Cloud OCR error: {e}")
-                # Fall back to Mistral for OCR
-        
-        # If Google Vision API fails or is not configured, use Mistral
-        print("Falling back to Mistral for OCR...")
-        return self.detect_text_with_mistral(image_path)
-    
-    def detect_text_with_mistral(self, image_path):
-        """Use Mistral's vision capabilities for OCR as a fallback"""
-        # Get the base64 string
-        base64_image = self.encode_image_to_base64(image_path)
-        
-        if base64_image:
+                # Fall back to Gemini for OCR
+
+        # If Google Vision API fails or is not configured, use Gemini
+        print("Falling back to Gemini for OCR...")
+        return self.detect_text_with_gemini(image_path)
+
+    def detect_text_with_gemini(self, image_path):
+        """Use Gemini's vision capabilities for OCR as a fallback"""
+        # Load the image as a PIL Image
+        try:
+            pil_image = Image.open(image_path) if image_path else None
+        except Exception as e:
+            print(f"Failed to load image for OCR: {e}")
+            pil_image = None
+
+        if pil_image:
             try:
-                # Define the messages for the chat
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Extract and return ONLY the text from this image. Just the raw text, no descriptions."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": f"data:image/jpeg;base64,{base64_image}" 
-                            }
-                        ]
-                    }
-                ]
-                
-                # Get the chat response
-                chat_response = self.mistral_client.chat.complete(
-                    model="pixtral-12b-2409",  # Vision-capable model
-                    messages=messages
+                prompt = "Extract and return ONLY the text from this image. Just the raw text, no descriptions."
+
+                # Get the response
+                resp = self.gemini_client.models.generate_content(
+                    model=self.gemini_model,
+                    contents=[prompt, pil_image]
                 )
-                
+
                 # Get the response text
-                text = chat_response.choices[0].message.content
-                
+                text = resp.text
+
                 # Filter out common phrases that indicate no text
                 if "no text" in text.lower() or "i don't see any text" in text.lower():
                     return None
-                    
+
                 return text
-                
+
             except Exception as e:
-                print(f"Mistral OCR error: {e}")
+                print(f"Gemini OCR error: {e}")
                 return None
         else:
-            print("Failed to encode image for OCR")
+            print("Failed to load image for OCR")
             return None
-    
-    def process_text_with_mistral(self, text, task="translate", target_language=None):
-        """Process text with Mistral API for various tasks like translation"""
+
+    def process_text_with_gemini(self, text, task="translate", target_language=None):
+        """Process text with Gemini API for various tasks like translation"""
         if text is None or text.strip() == "":
             self.speak("No text to process")
             return None
@@ -163,20 +153,18 @@ class TextReader(SmartGlasses):
             else:
                 prompt = f"Process the following text for task '{task}': \n\n{text}"
             
-            # Call Mistral API
-            response = self.mistral_client.chat.complete(
-                model="mistral-small",  # Or any other appropriate model
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+            # Call Gemini API
+            resp = self.gemini_client.models.generate_content(
+                model=self.gemini_model,
+                contents=[prompt]
             )
-            
+
             # Extract and return the processed text
-            result = response.choices[0].message.content
+            result = resp.text
             return result
-            
+
         except Exception as e:
-            error_msg = f"Error processing text with Mistral API: {str(e)}"
+            error_msg = f"Error processing text with Gemini API: {str(e)}"
             print(error_msg)
             self.speak(error_msg)
             return None
@@ -184,7 +172,7 @@ class TextReader(SmartGlasses):
     def translate_text(self, text, target_language):
         """Translate text to the specified language"""
         if target_language in self.available_languages:
-            result = self.process_text_with_mistral(text, "translate", target_language)
+            result = self.process_text_with_gemini(text, "translate", target_language)
             if result:
                 self.speak(f"Translation: {result}")
                 return result

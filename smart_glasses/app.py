@@ -61,13 +61,13 @@ def main():
     args = parser.parse_args()
 
     # Load API keys from environment variables
-    mistral_api_key = os.getenv("MISTRAL_API_KEY")
-    if not mistral_api_key:
-        logging.warning("MISTRAL_API_KEY not found in environment. Some features will be limited.")
-    
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        logging.warning("GEMINI_API_KEY not found in environment. Some features will be limited.")
+
     # Configuration for the voice assistant
     config = {
-        "mistral_api_key": mistral_api_key,
+        "gemini_api_key": gemini_api_key,
         "tts_voice": args.voice,
         "tts_rate": "+0%",
         "tts_volume": "+10%",
@@ -105,7 +105,7 @@ def main():
         
         if SCENE_ANALYZER_AVAILABLE:
             logging.info("Initializing scene analyzer...")
-            scene_analyzer = SceneAnalyzer(mistral_api_key=mistral_api_key)
+            scene_analyzer = SceneAnalyzer(gemini_api_key=gemini_api_key)
             speak("Scene analyzer ready")
         
         # Set modules in the voice assistant

@@ -13,22 +13,22 @@ load_dotenv()
 class SceneAnalyzer(SmartGlasses):
     """Scene analysis, color identification, and specialized recognition"""
     
-    def __init__(self, config=None, mistral_api_key=None):
+    def __init__(self, config=None, gemini_api_key=None):
         # Initialize the base class
         super().__init__(config)
-        
+
         # Thread tracking
         self.active_threads = []
         self.thread_lock = threading.Lock()
-        
+
         # Get API keys from environment variables or from parameters
         self.moondream_api_key = os.environ.get("MOONDREAM_API_KEY")
-        
-        # Set Mistral API key from parameter or config
-        if mistral_api_key:
+
+        # Set Gemini API key from parameter or config
+        if gemini_api_key:
             if self.config is None:
                 self.config = {}
-            self.config["mistral_api_key"] = mistral_api_key
+            self.config["gemini_api_key"] = gemini_api_key
         
         # Moondream client (will be initialized later)
         self.moondream_client = None
@@ -301,13 +301,13 @@ class SceneAnalyzer(SmartGlasses):
             except Exception as e:
                 print(f"Error using Moondream: {e}")
                 
-            # Fall back to Mistral if Moondream fails or is not available
-            if not description and hasattr(self, 'mistral_client') and self.mistral_client:
-                description = self.describe_scene_with_mistral(frame, query)
-                
+            # Fall back to Gemini if Moondream fails or is not available
+            if not description and hasattr(self, 'gemini_client') and self.gemini_client:
+                description = self.describe_scene_with_gemini(frame, query)
+
             # If both fail, provide a simple message
             if not description:
-                description = "I'm unable to describe the scene right now. Both Moondream and Mistral AI services are unavailable."
+                description = "I'm unable to describe the scene right now. Both Moondream and Gemini AI services are unavailable."
             
             # Speak the description (full text)
             self.speak(description)
@@ -323,53 +323,40 @@ class SceneAnalyzer(SmartGlasses):
             self.speak("Sorry, I encountered an error while trying to describe the scene.")
             return None
     
-    def describe_scene_with_mistral(self, frame, query=None):
-        """Use Mistral API to describe the scene"""
+    def describe_scene_with_gemini(self, frame, query=None):
+        """Use Gemini API to describe the scene"""
         # Save the image
         image_path = self.save_image(frame)
-        
+
         # Use default query if none provided
         if query is None or query.strip() == "":
             query = "What's in this image? Please describe the scene concisely for a blind person."
-        
-        # Get the base64 string
-        base64_image = self.encode_image_to_base64(image_path)
-        
-        if base64_image:
+
+        # Load the image as a PIL Image
+        try:
+            pil_image = Image.open(image_path) if image_path else None
+        except Exception as e:
+            print(f"Error loading image: {e}")
+            pil_image = None
+
+        if pil_image:
             try:
-                # Define the messages for the chat
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": query
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": f"data:image/jpeg;base64,{base64_image}" 
-                            }
-                        ]
-                    }
-                ]
-                
-                # Get the chat response
-                chat_response = self.mistral_client.chat.complete(
-                    model="pixtral-12b-2409",  # Use appropriate model
-                    messages=messages
+                # Get the response
+                resp = self.gemini_client.models.generate_content(
+                    model=self.gemini_model,
+                    contents=[query, pil_image]
                 )
-                
+
                 # Get the response text
-                response_text = chat_response.choices[0].message.content
+                response_text = resp.text
                 return response_text
-                
+
             except Exception as e:
-                error_msg = f"Error with Mistral API: {str(e)}"
+                error_msg = f"Error with Gemini API: {str(e)}"
                 print(error_msg)
                 return None
         else:
-            print("Failed to encode image")
+            print("Failed to load image")
             return None
     
     def identify_dominant_color(self, frame):
@@ -434,44 +421,33 @@ class SceneAnalyzer(SmartGlasses):
             if currency_info and not any(phrase in currency_info.lower() for phrase in ["no currency", "no money", "don't see any", "not visible"]):
                 return currency_info
         
-        # Fall back to Mistral if Moondream fails or doesn't identify currency
-        return self.identify_currency_with_mistral(frame)
-    
-    def identify_currency_with_mistral(self, frame):
-        """Identify currency using Mistral API as a fallback"""
+        # Fall back to Gemini if Moondream fails or doesn't identify currency
+        return self.identify_currency_with_gemini(frame)
+
+    def identify_currency_with_gemini(self, frame):
+        """Identify currency using Gemini API as a fallback"""
         # Save the image
         image_path = self.save_image(frame)
-        
-        # Get the base64 string
-        base64_image = self.encode_image_to_base64(image_path)
-        
-        if base64_image:
+
+        # Load the image as a PIL Image
+        try:
+            pil_image = Image.open(image_path) if image_path else None
+        except Exception as e:
+            print(f"Error loading image: {e}")
+            pil_image = None
+
+        if pil_image:
             try:
-                # Define the messages for the chat
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Is there any currency or money in this image? If yes, identify the type and denomination. Just state the currency and amount, nothing else."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": f"data:image/jpeg;base64,{base64_image}" 
-                            }
-                        ]
-                    }
-                ]
-                
-                # Get the chat response
-                chat_response = self.mistral_client.chat.complete(
-                    model="pixtral-12b-2409",
-                    messages=messages
+                prompt = "Is there any currency or money in this image? If yes, identify the type and denomination. Just state the currency and amount, nothing else."
+
+                # Get the response
+                resp = self.gemini_client.models.generate_content(
+                    model=self.gemini_model,
+                    contents=[prompt, pil_image]
                 )
-                
+
                 # Get the response text
-                response_text = chat_response.choices[0].message.content
+                response_text = resp.text
                 
                 if "no" in response_text.lower() or "not" in response_text.lower():
                     return None
@@ -483,7 +459,7 @@ class SceneAnalyzer(SmartGlasses):
                 print(error_msg)
                 return None
         else:
-            print("Failed to encode image for currency identification")
+            print("Failed to load image for currency identification")
             return None
     
     def analyze_safety_features(self, frame):

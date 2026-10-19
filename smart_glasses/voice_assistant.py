@@ -678,7 +678,7 @@ class VoiceAssistant(SmartGlasses):
         print("\n" + help_text)
     
     def process_conversation_query(self, query):
-        """Process a query in conversation mode using Mistral"""
+        """Process a query in conversation mode using Gemini"""
         if not query:
             return
             
@@ -750,14 +750,22 @@ class VoiceAssistant(SmartGlasses):
                         logging.error(f"Error adding visual context: {e}")
             
             # Prepare the messages including history
-            if hasattr(self, 'mistral_client') and self.mistral_client:
-                chat_response = self.mistral_client.chat.complete(
-                    model="mistral-small",  # Or another appropriate model
-                    messages=self.conversation_history
+            if hasattr(self, 'gemini_client') and self.gemini_client:
+                # Convert the chat history to Gemini contents (assistant -> model)
+                contents = [
+                    {
+                        "role": "model" if msg["role"] == "assistant" else "user",
+                        "parts": [{"text": msg["content"]}]
+                    }
+                    for msg in self.conversation_history
+                ]
+                resp = self.gemini_client.models.generate_content(
+                    model=self.gemini_model,
+                    contents=contents
                 )
-                
+
                 # Get the response
-                response_text = chat_response.choices[0].message.content
+                response_text = resp.text
                 
                 # Add the response to history
                 self.conversation_history.append({"role": "assistant", "content": response_text})
@@ -775,17 +783,15 @@ class VoiceAssistant(SmartGlasses):
     async def run_in_async_mode(self, prompt):
         """Run a specific prompt in async mode (example for conversation mode)"""
         try:
-            response = await self.mistral_client.chat.stream_async(
-                model="mistral-tiny",  # Or appropriate model
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+            response = await self.gemini_client.aio.models.generate_content_stream(
+                model=self.gemini_model,
+                contents=[prompt]
             )
-            
+
             full_response = ""
             async for chunk in response:
-                if chunk.data.choices[0].delta.content is not None:
-                    content = chunk.data.choices[0].delta.content
+                if chunk.text is not None:
+                    content = chunk.text
                     full_response += content
                     print(content, end="")
             

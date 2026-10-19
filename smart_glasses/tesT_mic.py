@@ -183,13 +183,13 @@
 
 import os
 import asyncio
-from mistralai import Mistral
+from google import genai
 
 class QueryCategorizer:
     def __init__(self):
-        self.api_key = os.getenv("MISTRAL_API_KEY")
-        self.client = Mistral(api_key=self.api_key)
-        self.model = "mistral-tiny"
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.client = genai.Client(api_key=self.api_key)
+        self.model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         
         self.system_prompt = """REACT PROMPT:
 You are a classification agent. Analyze the user input and categorize it into EXACTLY ONE of these categories:
@@ -203,17 +203,12 @@ Example responses: "object detection", "scene analyzer", etc."""
 
     async def categorize(self, text: str) -> str:
         try:
-            response = await self.client.chat.stream_async(
+            response = await self.client.aio.models.generate_content(
                     model=self.model,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": text,
-                        },
-                    ],
+                    contents=[self.system_prompt, text],
                 )
-            
-            category = response.choices[0].message.content.strip().lower()
+
+            category = response.text.strip().lower()
             return self._validate_category(category)
             
         except Exception as e:

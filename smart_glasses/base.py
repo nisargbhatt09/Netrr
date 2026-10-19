@@ -8,11 +8,14 @@ import base64
 import logging
 # Import Picamera2 dynamically in __init__
 try:
-    from mistralai import Mistral
-    MISTRAL_AVAILABLE = True
+    from google import genai
+    GEMINI_AVAILABLE = True
 except ImportError:
-    logging.warning("Mistral API client not available - LLM features will be limited")
-    MISTRAL_AVAILABLE = False
+    logging.warning("Gemini API client not available - LLM features will be limited")
+    GEMINI_AVAILABLE = False
+
+# Gemini model id (override with GEMINI_MODEL env var)
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
 # Try to import PyAudio for direct audio device handling
 try:
@@ -135,19 +138,20 @@ class SmartGlasses:
         self.last_announced = {}  # Dictionary to track last announcement times
         
         # API keys
-        self.mistral_api_key = os.environ.get("MISTRAL_API_KEY", "YOUR_API_KEY_HERE")
-        
-        # Initialize the Mistral client if available
-        if MISTRAL_AVAILABLE and self.mistral_api_key != "YOUR_API_KEY_HERE":
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "YOUR_API_KEY_HERE")
+        self.gemini_model = GEMINI_MODEL
+
+        # Initialize the Gemini client if available
+        if GEMINI_AVAILABLE and self.gemini_api_key != "YOUR_API_KEY_HERE":
             try:
-                self.mistral_client = Mistral(api_key=self.mistral_api_key)
-                logging.info("Mistral client initialized")
+                self.gemini_client = genai.Client(api_key=self.gemini_api_key)
+                logging.info("Gemini client initialized")
             except Exception as e:
-                logging.error(f"Error initializing Mistral client: {e}")
-                self.mistral_client = None
+                logging.error(f"Error initializing Gemini client: {e}")
+                self.gemini_client = None
         else:
-            logging.warning("Mistral client not available - LLM features will be disabled")
-            self.mistral_client = None
+            logging.warning("Gemini client not available - LLM features will be disabled")
+            self.gemini_client = None
         
         # Initialize keyboard input queue for non-microphone mode
         self.keyboard_command_queue = []

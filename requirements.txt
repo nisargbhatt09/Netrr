@@ -13,7 +13,8 @@ edge-tts==6.1.12
 psutil==5.9.8
 
 # LLM / VLM clients (pin after verifying against the installed SDK)
-mistralai
+# Google Gemini SDK (replaces retired mistralai / pixtral models)
+google-genai
 
 # Dev / evaluation
 pytest==8.3.3

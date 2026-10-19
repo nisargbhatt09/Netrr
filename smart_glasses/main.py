@@ -39,7 +39,7 @@ def main():
     parser = argparse.ArgumentParser(description="Smart AI Glasses for the Visually Impaired")
     parser.add_argument("--mode", type=str, default="all", choices=["all", "object", "text", "face", "scene", "voice"],
                        help="Operating mode to run (default: all)")
-    parser.add_argument("--api-key", type=str, default=None, help="Mistral API key")
+    parser.add_argument("--api-key", type=str, default=None, help="Gemini API key")
     parser.add_argument("--moondream-url", type=str, default=None, help="Moondream API endpoint URL")
     parser.add_argument("--mic", type=str, default=None, choices=["auto", "true", "false"], 
                        help="Microphone availability (auto=detect, true=force on, false=force off)")
@@ -73,7 +73,7 @@ def main():
     
     # Set API key from args or environment
     if args.api_key:
-        os.environ["MISTRAL_API_KEY"] = args.api_key
+        os.environ["GEMINI_API_KEY"] = args.api_key
     
     # Parse hardware configuration
     config = {}
@@ -146,7 +146,7 @@ def main():
                     modules["scene_analyzer"].initialize_moondream(endpoint=args.moondream_url)
                 except Exception as e:
                     logging.warning(f"Could not initialize Moondream: {e}")
-                    logging.warning("Falling back to Mistral API")
+                    logging.warning("Falling back to Gemini API")
             active_modules.append("scene_analyzer")
             
         if args.mode in ["all", "voice"] and VOICE_ASSISTANT_AVAILABLE:
