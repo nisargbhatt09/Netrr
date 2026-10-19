@@ -136,8 +136,9 @@ nano .env  # Edit with your API keys
 
 The system uses cloud services for better performance on limited hardware. You'll need these API keys:
 
-1. **Mistral API Key**: For text processing and conversation
-   - Sign up at https://console.mistral.ai/
+1. **Gemini API Key**: For text processing and conversation
+   - Get a key from Google AI Studio at https://aistudio.google.com/
+   - Set it as `GEMINI_API_KEY` in your `.env` file
    
 2. **Moondream API Key**: For advanced scene analysis
    - Sign up at https://www.moondream.ai/
@@ -180,5 +181,5 @@ The system requires internet connectivity for these cloud API features. Set up:
 
 - Verify your internet connection
 - Check that API keys are correctly entered in the `.env` file
-- Test connection with `ping api.mistral.ai` or similar
+- Test connection with `ping generativelanguage.googleapis.com` or similar
 - Make sure the API service isn't experiencing outages 

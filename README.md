@@ -35,14 +35,14 @@ The system is organized into modular components:
 - Speaker or headphones (optional - system works without them)
 - Microphone (optional - can use keyboard input instead)
 - Internet connection for API-based features
-- API keys (Mistral, Moondream, Google Cloud Vision)
+- API keys (Google Gemini via `GEMINI_API_KEY` from Google AI Studio, Moondream, Google Cloud Vision)
 
 ### Software Dependencies
 
 - Python 3.7+
 - OpenCV
 - Ultralytics YOLOv8
-- Mistral AI API
+- Google Gemini API (`google-genai` SDK, model `gemini-3.8-flash`)
 - Moondream API
 - Google Cloud Vision API (optional)
 - SpeechRecognition
@@ -175,7 +175,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - YOLOv8 by Ultralytics
-- Mistral AI for their powerful LLM API
+- Google Gemini for their powerful LLM API
 - Moondream for vision-language capabilities
 - Google Cloud Vision for OCR capabilities
 - The open-source computer vision community
