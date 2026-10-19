@@ -1,6 +1,6 @@
 # Hardware Setup Guide
 
-This guide explains how to set up the required hardware components for the Smart AI Glasses system.
+This guide covers setting up the hardware for Netrr on a Raspberry Pi. The same software runs on an NVIDIA Jetson; the differences are noted under Software Configuration.
 
 ## Components Required
 
@@ -120,29 +120,56 @@ sudo apt install -y python3-pip python3-venv espeak git
 git clone https://github.com/nisargbhatt09/Netrr.git
 cd Netrr
 
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# Install: the script detects Raspberry Pi vs Jetson and picks the right extras
+./scripts/install.sh
 
-# Install python dependencies
-pip install -r requirements.txt
+# Or install manually:
+#   python3 -m venv --system-site-packages venv
+#   source venv/bin/activate
+#   pip install -e '.[pi]'
 
 # Set up API keys
 cp .env.example .env
 nano .env  # Edit with your API keys
+
+# Check the environment before running
+netrr-doctor
 ```
+
+### NVIDIA Jetson
+
+The CSI camera on a Jetson is read through a GStreamer pipeline (`nvarguscamerasrc`), so OpenCV must be built with GStreamer support. The JetPack system package has it; the pip wheels `opencv-python` and `opencv-python-headless` do not.
+
+```bash
+sudo apt-get install -y python3-opencv python3-numpy
+python3 -m venv --system-site-packages venv
+source venv/bin/activate
+pip install --no-deps -e .
+```
+
+`scripts/install.sh` performs exactly this on a Jetson, and `netrr-doctor` reports whether the OpenCV it finds has GStreamer. Note that `ultralytics` is not installed on the Jetson path, because its pip dependency pulls a torch wheel that does not match JetPack; install NVIDIA's torch first, then `pip install --no-deps ultralytics`, if you want object detection.
+
+### Face recognition (optional)
+
+Face identification needs `dlib` and `face_recognition`. Both are native extensions and can take a long time to build, especially on a Raspberry Pi, so they are not installed by default. Add them with:
+
+```bash
+pip install -e '.[face]'
+```
+
+Every other feature works without them. When they are absent the voice commands for identifying or remembering a person say so rather than failing, and `netrr-doctor` reports the feature as unavailable.
 
 ## API Keys Setup
 
 The system uses cloud services for better performance on limited hardware. You'll need these API keys:
 
-1. **Gemini API Key**: For text processing and conversation
+1. **Gemini API Key**: For scene description, OCR fallback, translation and conversation
    - Get a key from Google AI Studio at https://aistudio.google.com/
    - Set it as `GEMINI_API_KEY` in your `.env` file
-   
+
 2. **Moondream API Key**: For advanced scene analysis
    - Sign up at https://www.moondream.ai/
-   
+
 3. **Google Cloud Vision API** (optional): For OCR text recognition
    - Set up a Google Cloud account and enable the Vision API
    - Create an API key in the Google Cloud Console
@@ -159,16 +186,28 @@ The system requires internet connectivity for these cloud API features. Set up:
 
 ## Troubleshooting
 
+Start with the environment check, which reports most of these problems directly:
+
+```bash
+netrr-doctor
+```
+
 ### Camera Not Working
 
 - Check CSI cable connection
 - Ensure camera is enabled in `raspi-config`
 - Try `libcamera-hello` to test
+- On a Jetson, confirm OpenCV was built with GStreamer (`netrr-doctor` reports this)
+
+### Face Recognition Not Working
+
+- Install the optional extras: `pip install -e '.[face]'`
+- `netrr-doctor` reports whether `face_recognition` imports
 
 ### Microphone Not Working
 
 - Check connections
-- Try `arecord -l` to list devices
+- Try `arecord -l` to list devices, or `netrr --list-audio`
 - Set the correct input device with `alsamixer`
 
 ### Speaker Not Working
@@ -176,10 +215,10 @@ The system requires internet connectivity for these cloud API features. Set up:
 - Check connections
 - Try `aplay /usr/share/sounds/alsa/Front_Center.wav`
 - Adjust volume with `alsamixer`
-  
+
 ### API Connection Issues
 
 - Verify your internet connection
 - Check that API keys are correctly entered in the `.env` file
 - Test connection with `ping generativelanguage.googleapis.com` or similar
-- Make sure the API service isn't experiencing outages 
+- Make sure the API service isn't experiencing outages

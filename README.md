@@ -11,15 +11,15 @@ The repository holds two things: a working prototype, and the dependency-free re
 | Path | What it is |
 | --- | --- |
 | `smart_glasses/` | The working prototype. Hardware abstraction, object detection, scene description, OCR, face recognition, and the voice interface. |
-| `netrr/` | The research core. Pure standard library, no hardware or ML dependencies, so it runs and is tested anywhere. It grades each spoken claim by how well it is grounded and decides how to phrase it. |
+| `netrr/` | The research core. Pure standard library, no hardware or ML dependencies, so it runs and is tested anywhere. It grades each spoken claim by how well it is grounded, decides how to phrase it, and detects the platform. |
 | `eval/` | Evaluation harness. Runs a narrator backend over a fixed frame set and writes claim-level output as JSONL, with no camera or microphone involved. |
 | `frames/` | The fixed input set for the benchmark, seeded from the prototype images. |
 | `results/` | Harness output (gitignored). |
-| `tests/` | Unit tests for `netrr/` and platform detection. |
+| `tests/` | Unit tests for `netrr/`, platform detection, camera backend selection, and the doctor checks. |
 | `scripts/` | Platform-aware install script. |
 | `pyproject.toml` | Packaging: optional extras, and the `netrr` and `netrr-doctor` commands. |
 | `docs/` | Hardware setup guide. |
-| `archive/` | Superseded early scripts, kept for reference. |
+| `archive/` | Superseded early scripts and launchers, kept for reference. |
 | `RESULTS.md` | Append-only log of every experiment. |
 
 ## Features
@@ -31,7 +31,7 @@ The prototype (`smart_glasses/`) provides:
 - **Text recognition**: Google Cloud Vision for OCR, Gemini as fallback.
 - **Translation**: Multi-language text translation through Gemini.
 - **Currency recognition**: Notes and denominations, via Moondream or Gemini.
-- **Face recognition**: Identifies known people and can learn a new face by name.
+- **Face recognition**: Identifies known people and can learn a new face by name. Optional; it needs the `dlib` and `face_recognition` packages and is disabled cleanly when they are absent.
 - **Colour identification**: Names the dominant colour in view.
 - **Voice interface**: Wake-word commands ("hey glasses, ...") with a full keyboard fallback when no microphone is present.
 - **Conversation mode**: Natural back-and-forth through Gemini.
@@ -67,6 +67,8 @@ Software: Python 3.10+. Platform-specific dependencies are declared as optional 
 
 **Jetson note:** the CSI camera is read through a GStreamer pipeline (`nvarguscamerasrc`), so OpenCV must be built with GStreamer support. The JetPack system package provides this (`sudo apt install python3-opencv`); the pip wheels `opencv-python` and `opencv-python-headless` do not. The install script handles this on a Jetson by taking OpenCV and numpy from apt, creating the venv with `--system-site-packages`, and installing the project with `pip install --no-deps` so no wheel shadows the system build. `netrr-doctor` reports whether the OpenCV it finds has GStreamer.
 
+**Face recognition note:** face identification needs `dlib` and `face_recognition`. Both are native extensions and can take a long time to build, especially on a Raspberry Pi, so the install script does not install them. Add them with `pip install -e '.[face]'` if you want that feature. Every other feature works without them, and the related voice commands respond with a clear message instead of failing.
+
 ## Installation
 
 The quickest path is the install script, which detects the platform and installs the matching extras:
@@ -95,7 +97,7 @@ Confirm the environment before running:
 netrr-doctor
 ```
 
-`netrr-doctor` reports the detected platform, which dependencies are present, camera and audio availability, and whether your API keys are set. It exits non-zero only on a hard failure.
+`netrr-doctor` reports the detected platform, which dependencies are present, camera and audio availability, whether the OpenCV it finds has GStreamer, and whether your API keys are set. It exits non-zero only on a hard failure.
 
 ## Running the prototype
 
@@ -111,6 +113,9 @@ netrr --mode scene
 netrr --mode text
 netrr --mode face
 netrr --mode voice
+
+# List audio devices and exit (useful for choosing a microphone)
+netrr --list-audio
 
 # Force hardware settings, useful for testing on a laptop
 netrr --mode all --mic false --speaker false
@@ -188,6 +193,7 @@ Running a vision-language model fully on-device is not viable on a Pi 4B with 4 
 
 ## Development
 
+- `smart_glasses/main.py` is the single launcher. `run.py`, `python -m smart_glasses` and the `netrr` console command all reach it. The older `app.py` and `start.py` launchers are in `archive/`.
 - Each prototype module is a class that inherits from `SmartGlasses` in `smart_glasses/base.py`.
 - The research core is deliberately dependency-free. Keep it that way so it stays testable and reviewable; put hardware and model code in `smart_glasses/`.
 - Add tests under `tests/` and log every experiment in `RESULTS.md`.
