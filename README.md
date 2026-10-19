@@ -1,185 +1,194 @@
-# Smart AI Glasses for the Visually Impaired
+# Netrr
 
-A comprehensive assistive technology system that combines computer vision, AI, and natural language processing to help visually impaired individuals navigate and interact with their environment.
+An assistive wearable for blind and low-vision users. A camera captures the scene, computer vision and vision-language models interpret it, and the system speaks what matters: objects and their positions, safety hazards, readable text, currency, and who is in front of you.
+
+Netrr was co-designed with the Ahmedabad Blind People Association and won the Gujarat Gaurav Award (2024).
+
+## Repository layout
+
+The repository holds two things: a working prototype, and the dependency-free research core the project is moving toward.
+
+| Path | What it is |
+| --- | --- |
+| `smart_glasses/` | The working prototype. Hardware abstraction, object detection, scene description, OCR, face recognition, and the voice interface. |
+| `netrr/` | The research core. Pure standard library, no hardware or ML dependencies, so it runs and is tested anywhere. It grades each spoken claim by how well it is grounded and decides how to phrase it. |
+| `eval/` | Evaluation harness. Runs a narrator backend over a fixed frame set and writes claim-level output as JSONL, with no camera or microphone involved. |
+| `frames/` | The fixed input set for the benchmark, seeded from the prototype images. |
+| `results/` | Harness output (gitignored). |
+| `tests/` | Unit tests for `netrr/`. |
+| `docs/` | Hardware setup guide. |
+| `archive/` | Superseded early scripts, kept for reference. |
+| `RESULTS.md` | Append-only log of every experiment. |
 
 ## Features
 
-- **Object Detection**: Identifies objects in the environment with position awareness (e.g., "chair at middle left, medium distance")
-- **Safety Awareness**: Detects and warns about obstacles, stairs, edges, and other safety hazards
-- **Text Recognition**: Reads text from books, signs, displays, etc. using cloud-based OCR
-- **Text Translation**: Translates text between multiple languages
-- **Face Recognition**: Identifies known people by name, estimates age/gender, and remembers new people
-- **Scene Description**: Explains surroundings using Moondream's rich visual analysis
-- **Color Identification**: Recognizes and names colors in the environment
-- **Currency Recognition**: Identifies different currencies and denominations
-- **Voice Interface**: Accepts voice commands for all functionality
-- **Conversation Mode**: Natural language conversation capability
-- **Hardware Adaptability**: Automatically detects available hardware and provides fallbacks when needed
-- **Keyboard Control**: Provides keyboard input option when microphone isn't available
+The prototype (`smart_glasses/`) provides:
 
-## System Architecture
+- **Object detection**: YOLOE (default) or YOLO, with 3x3 grid position ("chair at middle left") and a bounding-box based distance estimate.
+- **Scene description**: Moondream first, Google Gemini as fallback.
+- **Text recognition**: Google Cloud Vision for OCR, Gemini as fallback.
+- **Translation**: Multi-language text translation through Gemini.
+- **Currency recognition**: Notes and denominations, via Moondream or Gemini.
+- **Face recognition**: Identifies known people and can learn a new face by name.
+- **Colour identification**: Names the dominant colour in view.
+- **Voice interface**: Wake-word commands ("hey glasses, ...") with a full keyboard fallback when no microphone is present.
+- **Conversation mode**: Natural back-and-forth through Gemini.
+- **Hardware adaptability**: Detects which camera, microphone, and speaker are present and degrades gracefully when any is missing.
 
-The system is organized into modular components:
+## Research direction: calibrated narration
 
-- **Base**: Core functionality shared across all modules
-- **Object Detector**: YOLOv8-based object detection with spatial awareness
-- **Text Reader**: Cloud-based OCR and translation capabilities
-- **Face Recognizer**: Face detection, recognition, and metadata storage
-- **Scene Analyzer**: Scene description using Moondream, color identification, currency recognition
-- **Voice Assistant**: Voice command processing and conversation interface
+A wearable that describes a scene in fluent speech gives the user no way to check it. As the field has framed the problem, that is a *verification disability*: the user cannot see the frame, so they are compelled to rely on the description, including when it is wrong.
+
+The direction this project is taking is to make the system say how well it knows each thing it says. Every spoken statement becomes a `Claim` with a grounding grade (`supported`, `uncertain`, `unsupported`) and a harm label (`dangerous`, `inconvenient`, `cosmetic`). The grade drives how the claim is spoken:
+
+| Grade | Harm | Action |
+| --- | --- | --- |
+| supported | any | state it plainly |
+| uncertain | cosmetic / inconvenient | hedge ("there may be") |
+| uncertain | dangerous | hedge and re-confirm on the next frame |
+| unsupported | cosmetic | stay silent |
+| unsupported | dangerous | stay silent and ask the user to retake the frame |
+
+`netrr/ground/claims.py` implements this vocabulary, the cheap grading rules (presence from detections, spatial from grid position), and the policy above. It is unit-tested and has no heavy dependencies.
+
+Status, stated plainly: the research core is implemented and tested, but it is not yet wired into the live voice pipeline, and no benchmark numbers are published. The next steps are annotating the benchmark and connecting the policy to the narrator. Nothing here should be read as a result yet.
 
 ## Requirements
 
-- Raspberry Pi 4B (4GB RAM)
-- Raspberry Pi Camera Module V2 or compatible camera
-- Speaker or headphones (optional - system works without them)
-- Microphone (optional - can use keyboard input instead)
-- Internet connection for API-based features
-- API keys (Google Gemini via `GEMINI_API_KEY` from Google AI Studio, Moondream, Google Cloud Vision)
+- A machine to run on. The prototype targets a **Raspberry Pi 4B (4 GB)**; it also runs on a laptop for development.
+- Raspberry Pi Camera Module V2 or a compatible webcam.
+- Microphone and speaker or headphones (both optional, with keyboard and text fallbacks).
+- Internet access for the cloud features.
+- API keys: Google Gemini (required for the migrated paths), Moondream for scene analysis, and optionally Google Cloud Vision for OCR.
 
-### Software Dependencies
-
-- Python 3.7+
-- OpenCV
-- Ultralytics YOLOv8
-- Google Gemini API (`google-genai` SDK, model `gemini-3.8-flash`)
-- Moondream API
-- Google Cloud Vision API (optional)
-- SpeechRecognition
-- face_recognition
-- picamera2
+Software: Python 3.10+, and the packages in `requirements.txt`. Some are Raspberry Pi only (`picamera2`, `dlib`, `face_recognition`) and have no wheels on other platforms; they are commented out in `requirements.txt` and should be installed on the target device.
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/smart-glasses.git
-cd smart-glasses
+git clone https://github.com/nisargbhatt09/Netrr.git
+cd Netrr
 
-# Create and activate a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate        # On Windows: venv\Scripts\activate
 
-# Install the package and dependencies
-pip install -e .
+# Install dependencies
+pip install -r requirements.txt
 
 # Configure API keys
 cp .env.example .env
-# Edit .env file with your API keys
+# Edit .env and fill in your keys
 ```
 
-## Performance Optimizations
+There is no packaging file in this repository, so install with `pip install -r requirements.txt` rather than `pip install -e .`.
 
-This system is designed to run efficiently on a Raspberry Pi 4B with 4GB RAM:
+## Running the prototype
 
-- **Cloud-Based OCR**: Instead of resource-intensive local OCR with PyTesseract, we use cloud APIs for better performance
-- **Moondream API**: Utilizes the cloud-based Moondream API for scene analysis instead of running the model locally
-- **Efficient Image Processing**: Resizes images before processing to reduce memory usage
-- **Caching Mechanism**: Avoids repetitive analysis of similar scenes
-- **Hardware Adaptability**: Automatically detects available hardware and adjusts functionality
-
-## Usage
-
-### Running the Full System
+`run.py` is the entry point. It passes its arguments straight through to the CLI.
 
 ```bash
-# Basic usage
-smart-glasses --mode all
+# Run everything (object detection, scene, text, face, voice)
+python run.py --mode all
 
-# Force hardware settings (useful for testing)
-smart-glasses --mode all --mic false --speaker false
+# Run a single module
+python run.py --mode object
+python run.py --mode scene
+python run.py --mode text
+python run.py --mode face
+python run.py --mode voice
 
-# Specify custom log file and level
-smart-glasses --mode all --log-file custom.log --log-level DEBUG
+# Force hardware settings, useful for testing on a laptop
+python run.py --mode all --mic false --speaker false
+
+# Choose the detection model
+python run.py --mode object --model yoloe-11s-seg.pt
+
+# Control logging
+python run.py --mode all --log-file custom.log --log-level DEBUG
 ```
 
-### Hardware Detection
+### Keyboard commands
 
-The system automatically detects available hardware components:
+When no microphone is available, or if you prefer typing, use the console prompt:
 
-- If a microphone is not available, it falls back to keyboard input
-- If speakers are not available, all output is logged to console/file
-- You can override detection with `--mic` and `--speaker` options
+| Key | Action |
+| --- | --- |
+| `d` | Describe the scene |
+| `r` | Read text |
+| `t` | Translate text |
+| `w` | Identify a person |
+| `c` | Identify colour |
+| `m` | Identify currency |
+| `conv` | Start conversation mode |
+| `exit` | Leave conversation mode |
+| `h` | Help |
+| `q` | Quit |
 
-### Keyboard Commands
+### Voice commands
 
-When a microphone is not available or if you prefer keyboard input:
+Say a wake word ("hey glasses", "okay glasses") followed by a command: "describe", "read", "translate to Spanish", "who is this", "remember John", "what color is this", "currency", "tell me about John", "conversation mode", "help". "Exit conversation" leaves conversation mode.
 
-- Type commands in the console after the prompt (`>`)
-- Use shortcuts for common commands:
-  - `d` - Describe scene
-  - `r` - Read text
-  - `t` - Translate text
-  - `w` - Identify person
-  - `c` - Identify color
-  - `m` - Identify currency
-  - `conv` - Start conversation mode
-  - `exit` - Exit conversation mode
-  - `h` - Help
-  - `q` - Quit the program
+## Configuration
 
-### Running Specific Modules
+API keys are read from the environment (`.env` is loaded at startup):
+
+| Variable | Purpose |
+| --- | --- |
+| `GEMINI_API_KEY` | Google Gemini, used for scene description fallback, OCR fallback, translation, and conversation. |
+| `GEMINI_MODEL` | Optional. Overrides the Gemini model id. Default `gemini-3.8-flash`. |
+| `MOONDREAM_API_KEY` | Moondream, used for scene description and currency. |
+| `GOOGLE_VISION_API_KEY` | Optional. Google Cloud Vision, used for OCR. |
+
+## Evaluation harness
+
+The harness runs a narrator backend over a fixed frame set and writes one JSONL record per frame, with no camera or speaker involved.
 
 ```bash
-# Run only object detection
-smart-glasses --mode object
-
-# Run only text recognition
-smart-glasses --mode text
-
-# Run only face recognition
-smart-glasses --mode face
-
-# Run only scene analysis
-smart-glasses --mode scene
-
-# Run only voice assistant
-smart-glasses --mode voice
+python eval/run.py --frames frames --backend detector --out results/claims.jsonl
 ```
 
-### Voice Commands
+## Tests
 
-- **"Hey glasses, describe"**: Describes the current scene using Moondream
-- **"Hey glasses, read"**: Reads text in view using cloud-based OCR
-- **"Hey glasses, translate to Spanish"**: Translates text to Spanish
-- **"Hey glasses, who is this"**: Identifies people in view
-- **"Hey glasses, remember John"**: Remembers a new face as "John"
-- **"Hey glasses, what color is this"**: Identifies dominant color
-- **"Hey glasses, currency"**: Identifies currency in view
-- **"Hey glasses, tell me about John"**: Retrieves information about a known person
-- **"Hey glasses, conversation mode"**: Enters natural conversation mode
-- **"Exit conversation"**: Exits conversation mode
-- **"Hey glasses, help"**: Lists available commands
+The `netrr/` core has no heavy dependencies, so its tests run anywhere:
 
-### Logging
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
+# or, if pytest is installed
+pytest -q
+```
 
-All system output is logged to:
-- Console output
-- Log file (default: `smart_glasses.log`)
+## Performance notes
 
-You can customize the logging level and file with command line options.
+The system is designed to run within the memory budget of a Raspberry Pi 4B:
+
+- **Cloud offload**: OCR and vision-language work goes to cloud APIs rather than running large models on the device.
+- **Reduced frame size**: images are resized before processing.
+- **Detection interval**: detection runs on a configurable cadence rather than every frame.
+- **Caching and cooldowns**: repeated descriptions of a similar scene are suppressed.
+- **Hardware adaptation**: unavailable components are replaced with fallbacks rather than failing.
+
+Running a vision-language model fully on-device is not viable on a Pi 4B with 4 GB. A 2B model at 4-bit quantization is already around 4 GB, before the runtime overhead. Local inference would need a larger board, a Jetson-class device, or a paired phone.
 
 ## Development
 
-To extend or customize the system:
-
-1. Each module is a separate class that inherits from the base `SmartGlasses` class
-2. Add new functionality by extending existing classes or creating new ones
-3. Register new commands in the `VoiceAssistant` class
-4. Update the main application to include your new modules
+- Each prototype module is a class that inherits from `SmartGlasses` in `smart_glasses/base.py`.
+- The research core is deliberately dependency-free. Keep it that way so it stays testable and reviewable; put hardware and model code in `smart_glasses/`.
+- Add tests under `tests/` and log every experiment in `RESULTS.md`.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT. See the `LICENSE` file.
 
 ## Acknowledgments
 
-- YOLOv8 by Ultralytics
-- Google Gemini for their powerful LLM API
-- Moondream for vision-language capabilities
-- Google Cloud Vision for OCR capabilities
-- The open-source computer vision community
+- Ultralytics for YOLO and YOLOE.
+- Google for the Gemini API.
+- Moondream for vision-language capabilities.
+- Google Cloud Vision for OCR.
+- The Ahmedabad Blind People Association, co-design partners on the project.
 
 ## Contributors
 
-- Your Name <your.email@example.com> 
+- Nisarg Bhatt ([nisarg-bhatt.com](https://nisarg-bhatt.com))

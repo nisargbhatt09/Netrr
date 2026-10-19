@@ -1,4 +1,4 @@
-C# Hardware Setup Guide
+# Hardware Setup Guide
 
 This guide explains how to set up the required hardware components for the Smart AI Glasses system.
 
@@ -117,15 +117,15 @@ sudo apt upgrade -y
 sudo apt install -y python3-pip python3-venv espeak git
 
 # Clone the repository
-git clone https://github.com/your-username/smart-glasses.git
-cd smart-glasses
+git clone https://github.com/nisargbhatt09/Netrr.git
+cd Netrr
 
 # Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
 # Install python dependencies
-pip install -e .
+pip install -r requirements.txt
 
 # Set up API keys
 cp .env.example .env
