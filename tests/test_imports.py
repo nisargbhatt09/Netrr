@@ -1,49 +1,24 @@
-#!/usr/bin/env python
+"""Verify the dependency-free `netrr` package imports and exposes its API.
+
+This replaces the old import smoke test, which imported the hardware-coupled
+`smart_glasses` package and could only print checkmarks, not assert anything.
 """
-Test that all modules can be imported successfully
-"""
 
-import sys
-import os
+import unittest
 
-# Add the parent directory to the path
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, parent_dir)
+import netrr
+from netrr.ground.claims import Claim, choose_action, get_grid_position
 
-def test_imports():
-    """Test that all modules can be imported."""
-    print("Testing imports...")
-    
-    # Test base module
-    from smart_glasses.base import SmartGlasses
-    print("✓ Base module imported successfully")
-    
-    # Test object detection module
-    from smart_glasses.object_detection import ObjectDetector
-    print("✓ Object detection module imported successfully")
-    
-    # Test text recognition module
-    from smart_glasses.text_recognition import TextReader
-    print("✓ Text recognition module imported successfully")
-    
-    # Test face recognition module
-    from smart_glasses.face_recognition import FaceRecognizer
-    print("✓ Face recognition module imported successfully")
-    
-    # Test scene analyzer module
-    from smart_glasses.scene_analyzer import SceneAnalyzer
-    print("✓ Scene analyzer module imported successfully")
-    
-    # Test voice assistant module
-    from smart_glasses.voice_assistant import VoiceAssistant
-    print("✓ Voice assistant module imported successfully")
-    
-    # Test main module
-    from smart_glasses.main import main
-    print("✓ Main module imported successfully")
-    
-    print("\nAll imports successful!")
-    return True
+
+class TestPackageImport(unittest.TestCase):
+    def test_version_is_a_string(self):
+        self.assertIsInstance(netrr.__version__, str)
+
+    def test_public_api_is_callable(self):
+        self.assertTrue(callable(get_grid_position))
+        self.assertTrue(callable(choose_action))
+        self.assertTrue(callable(Claim))
+
 
 if __name__ == "__main__":
-    test_imports() 
+    unittest.main()

@@ -1,0 +1,3 @@
+{"image": "road.png", "label_file": "road_auto_annotate_labels/road.txt", "source": "prototype_test_images", "claims": null, "harm_graded": false}
+{"image": "bars.png", "label_file": null, "source": "prototype_test_images", "claims": null, "harm_graded": false}
+{"image": "path.png", "label_file": null, "source": "prototype_test_images", "claims": null, "harm_graded": false}
