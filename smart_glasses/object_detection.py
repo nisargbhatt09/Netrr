@@ -406,7 +406,4 @@ class ObjectDetector(SmartGlasses):
         except Exception as e:
             print(f"Error in detection loop: {e}")
         finally:
-            self.shutdown()
-
-for index, name in enumerate(sr.Microphone.list_microphone_names()):
-    print(f"Microphone {index}: {name}") 
+            self.shutdown() 
