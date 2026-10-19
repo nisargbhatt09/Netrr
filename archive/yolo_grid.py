@@ -97,7 +97,7 @@ def capture_and_analyze():
     if base64_image:
         try:
             # Retrieve the API key from environment variables
-            api_key = os.environ.get("MISTRAL_API_KEY","REDACTED")
+            api_key = os.environ.get("MISTRAL_API_KEY", "")
             
             if not api_key:
                 speak("Mistral API key not found in environment variables")
