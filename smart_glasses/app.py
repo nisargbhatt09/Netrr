@@ -23,19 +23,19 @@ try:
     from smart_glasses.edge import speak
     # Import optional modules if available
     try:
-        from smart_glasses.object_detector import ObjectDetector
+        from smart_glasses.object_detection import ObjectDetector
         OBJECT_DETECTION_AVAILABLE = True
     except ImportError:
         OBJECT_DETECTION_AVAILABLE = False
         
     try:
-        from smart_glasses.text_reader import TextReader
+        from smart_glasses.text_recognition import TextReader
         TEXT_READER_AVAILABLE = True
     except ImportError:
         TEXT_READER_AVAILABLE = False
         
     try:
-        from smart_glasses.face_recognizer import FaceRecognizer
+        from smart_glasses.face_recognition import FaceRecognizer
         FACE_RECOGNITION_AVAILABLE = True
     except ImportError:
         FACE_RECOGNITION_AVAILABLE = False
