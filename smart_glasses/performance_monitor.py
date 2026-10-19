@@ -7,17 +7,73 @@ for running efficiently on resource-constrained devices like Raspberry Pi.
 """
 
 import os
+import glob
 import time
 import threading
 import logging
 import subprocess
-import platform
 import psutil
 import signal
 import json
 from datetime import datetime
 
+from netrr.platform import detect_platform
+
 logger = logging.getLogger(__name__)
+
+# Raspberry Pi: a single SoC thermal zone.
+PI_THERMAL_ZONE = '/sys/class/thermal/thermal_zone0/temp'
+# Jetson: several zones (CPU-therm, GPU-therm, SOC-therm, ...) under one tree.
+JETSON_THERMAL_GLOB = '/sys/devices/virtual/thermal/thermal_zone*/temp'
+
+
+def _read_millidegrees(path):
+    """Read a sysfs thermal file (millidegrees C). None if missing or invalid."""
+    try:
+        with open(path, 'r') as f:
+            value = float(f.read().strip()) / 1000
+    except (OSError, ValueError):
+        return None
+    # Disconnected sensors report nonsense such as -256000 or 0.
+    if value <= 0 or value > 200:
+        return None
+    return value
+
+
+def read_cpu_temperature(info, pi_path=PI_THERMAL_ZONE, jetson_glob=JETSON_THERMAL_GLOB):
+    """Return the CPU temperature in Celsius for the platform, or None.
+
+    Raspberry Pi reads the single SoC zone. Jetson prefers the zone whose
+    `type` names the CPU and otherwise takes the first zone with a sane
+    reading. Any other platform, or any failure, yields None.
+    """
+    if info.is_raspberry_pi:
+        return _read_millidegrees(pi_path)
+
+    if info.is_jetson:
+        try:
+            zones = sorted(glob.glob(jetson_glob))
+        except Exception:
+            zones = []
+        fallback = None
+        for temp_path in zones:
+            value = _read_millidegrees(temp_path)
+            if value is None:
+                continue
+            type_path = os.path.join(os.path.dirname(temp_path), 'type')
+            try:
+                with open(type_path, 'r') as f:
+                    zone_type = f.read().strip().lower()
+            except OSError:
+                zone_type = ''
+            if 'cpu' in zone_type:
+                return value
+            if fallback is None:
+                fallback = value
+        return fallback
+
+    return None
+
 
 class PerformanceMonitor:
     """Monitors system performance and provides optimizations for Raspberry Pi."""
@@ -39,7 +95,9 @@ class PerformanceMonitor:
         self.threshold_temp = threshold_temp
         self.check_interval = check_interval
         self.optimization_enabled = optimization_enabled
-        self.is_raspberry_pi = self._check_if_raspberry_pi()
+        self.platform = detect_platform()
+        self.is_raspberry_pi = self.platform.is_raspberry_pi
+        self.is_jetson = self.platform.is_jetson
         self.monitoring = False
         self._monitor_thread = None
         self.stats_history = []
@@ -49,20 +107,9 @@ class PerformanceMonitor:
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
         
-        logger.info(f"Performance monitor initialized (Raspberry Pi: {self.is_raspberry_pi})")
-    
-    def _check_if_raspberry_pi(self):
-        """Check if the system is running on a Raspberry Pi."""
-        try:
-            if platform.system() == 'Linux':
-                with open('/proc/cpuinfo', 'r') as f:
-                    for line in f:
-                        if line.startswith('Model') and 'Raspberry Pi' in line:
-                            return True
-            return False
-        except:
-            return False
-    
+        logger.info(f"Performance monitor initialized (platform: {self.platform.name}, "
+                    f"Raspberry Pi: {self.is_raspberry_pi}, Jetson: {self.is_jetson})")
+
     def register_optimization_callback(self, callback):
         """
         Register a callback function to be called when optimization is needed.
@@ -79,15 +126,10 @@ class PerformanceMonitor:
         return False
     
     def _get_cpu_temperature(self):
-        """Get the CPU temperature on Raspberry Pi."""
-        if not self.is_raspberry_pi:
-            return None
-        
+        """Get the CPU temperature on Raspberry Pi or Jetson; None elsewhere."""
         try:
-            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
-                temp = float(f.read().strip()) / 1000
-            return temp
-        except:
+            return read_cpu_temperature(self.platform)
+        except Exception:
             return None
     
     def get_system_stats(self):

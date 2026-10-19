@@ -7,7 +7,36 @@ import unittest
 from unittest import mock
 
 from netrr import platform as nplatform
-from netrr.platform import PlatformInfo, detect_platform, read_text
+from netrr.platform import PlatformInfo, camera_backend_for, detect_platform, read_text
+
+
+def _info(name, pi=False, jetson=False):
+    return PlatformInfo(name=name, is_raspberry_pi=pi, is_jetson=jetson,
+                        arch="x", python_version="3.0.0")
+
+
+class TestCameraBackendFor(unittest.TestCase):
+    def test_raspberry_pi_uses_picamera2(self):
+        self.assertEqual(camera_backend_for(_info("raspberry_pi", pi=True)), "picamera2")
+
+    def test_jetson_uses_gstreamer(self):
+        self.assertEqual(camera_backend_for(_info("jetson", jetson=True)), "jetson_gstreamer")
+
+    def test_everything_else_uses_opencv(self):
+        for name in ("linux", "macos", "windows", "unknown"):
+            self.assertEqual(camera_backend_for(_info(name)), "opencv", name)
+
+    def test_pi_wins_if_both_flags_set(self):
+        self.assertEqual(camera_backend_for(_info("raspberry_pi", pi=True, jetson=True)), "picamera2")
+
+    def test_matches_detect_platform(self):
+        self.assertEqual(camera_backend_for(detect_platform("Raspberry Pi 4", "", False, "Linux")), "picamera2")
+        self.assertEqual(camera_backend_for(detect_platform("", "", True, "Linux")), "jetson_gstreamer")
+        self.assertEqual(camera_backend_for(detect_platform("", "", False, "Darwin")), "opencv")
+
+    def test_deterministic(self):
+        info = _info("jetson", jetson=True)
+        self.assertEqual(camera_backend_for(info), camera_backend_for(info))
 
 
 class TestDetectPlatform(unittest.TestCase):

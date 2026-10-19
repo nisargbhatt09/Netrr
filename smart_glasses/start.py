@@ -13,9 +13,25 @@ import pyaudio
 import logging
 import subprocess
 import time
+import psutil
+
+
+def clear_screen():
+    """Clear the console, but only when stdout is a real terminal.
+
+    Skipping the clear when output is piped, redirected to a log or run from
+    a service keeps the escape sequence out of logs and never fails.
+    """
+    try:
+        if not sys.stdout.isatty():
+            return
+        os.system('cls' if os.name == 'nt' else 'clear')
+    except Exception:
+        pass
+
 
 # Set up console for clear output
-os.system('cls' if os.name == 'nt' else 'clear')
+clear_screen()
 print("=" * 60)
 print("       SMART GLASSES SYSTEM FOR VISUALLY IMPAIRED")
 print("=" * 60)
@@ -73,11 +89,9 @@ def check_system_resources():
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
                 cpu_temp = float(f.read().strip()) / 1000
         
-        # Get CPU usage
-        cpu_usage = subprocess.check_output(['top', '-bn1']).decode()
-        cpu_line = [line for line in cpu_usage.split('\n') if 'Cpu(s)' in line][0]
-        cpu_usage_pct = float(cpu_line.split(',')[0].split(':')[1].strip().replace('%', ''))
-        
+        # Get CPU usage (psutil works on Linux, macOS and Windows alike)
+        cpu_usage_pct = psutil.cpu_percent(interval=0.5)
+
         print(f"CPU Usage: {cpu_usage_pct:.1f}%", end='')
         if cpu_temp:
             print(f" | Temperature: {cpu_temp:.1f}°C")
@@ -88,12 +102,10 @@ def check_system_resources():
     
     # Check memory
     try:
-        mem_info = subprocess.check_output(['free', '-m']).decode()
-        mem_lines = mem_info.split('\n')
-        mem_values = mem_lines[1].split()
-        total_mem = int(mem_values[1])
-        used_mem = int(mem_values[2])
-        mem_percent = (used_mem / total_mem) * 100
+        mem = psutil.virtual_memory()
+        total_mem = int(mem.total / (1024 * 1024))
+        used_mem = int(mem.used / (1024 * 1024))
+        mem_percent = mem.percent
         print(f"Memory: {used_mem}MB / {total_mem}MB ({mem_percent:.1f}%)")
     except:
         print("Memory stats unavailable")

@@ -104,5 +104,24 @@ def detect_platform(model=None, cpuinfo=None, has_tegra_release=None, system=Non
     )
 
 
+CAMERA_BACKEND_PICAMERA2 = "picamera2"
+CAMERA_BACKEND_JETSON_GSTREAMER = "jetson_gstreamer"
+CAMERA_BACKEND_OPENCV = "opencv"
+
+
+def camera_backend_for(info):
+    """Return the preferred camera backend name for a PlatformInfo.
+
+    Pure and deterministic: "picamera2" on a Raspberry Pi, "jetson_gstreamer"
+    on a Jetson (the CSI camera is only reachable through nvarguscamerasrc)
+    and "opencv" (a plain cv2.VideoCapture) everywhere else.
+    """
+    if info.is_raspberry_pi:
+        return CAMERA_BACKEND_PICAMERA2
+    if info.is_jetson:
+        return CAMERA_BACKEND_JETSON_GSTREAMER
+    return CAMERA_BACKEND_OPENCV
+
+
 if __name__ == "__main__":
     print(detect_platform())

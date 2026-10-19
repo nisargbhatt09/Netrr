@@ -6,7 +6,9 @@ import time
 import os
 import base64
 import logging
-# Import Picamera2 dynamically in __init__
+
+from .camera import Camera
+
 try:
     from google import genai
     GEMINI_AVAILABLE = True
@@ -163,35 +165,20 @@ class SmartGlasses:
         logging.info("Smart Glasses system initialized")
     
     def _init_camera(self):
-        """Initialize camera with fallback options"""
-        try:
-            # First try picamera2 for Raspberry Pi
-            try:
-                from picamera2 import Picamera2
-                # Use a lower resolution for better performance on RPi
-                self.picam = Picamera2(0)
-                self.picam.preview_configuration.main.size = (640, 480)
-                self.picam.preview_configuration.main.format = "RGB888"
-                self.picam.preview_configuration.align()
-                self.picam.configure("preview")
-                self.picam.start()
-                self.has_camera = True
-                logging.info("PiCamera2 initialized successfully at reduced resolution for performance")
-            except (ImportError, Exception) as e:
-                logging.warning(f"PiCamera2 initialization failed: {e}")
-                # Fall back to OpenCV
-                self.video_capture = cv2.VideoCapture(0)
-                if self.video_capture.isOpened():
-                    # Set lower resolution for Raspberry Pi
-                    self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    self.has_camera = True
-                    logging.info("Webcam initialized successfully with reduced resolution")
-                else:
-                    raise Exception("Failed to open webcam")
-        except Exception as e:
-            self.has_camera = False
-            logging.error(f"Error initializing camera: {e}")
+        """Initialize the camera through the platform-aware Camera wrapper.
+
+        Camera picks picamera2 on a Raspberry Pi, an nvarguscamerasrc
+        GStreamer pipeline on a Jetson and a plain webcam elsewhere, falling
+        through on failure. It never raises; 640x480 keeps inference cheap on
+        small boards.
+        """
+        self.camera = Camera(width=640, height=480,
+                             index=self.config.get("camera_index", 0))
+        self.has_camera = self.camera.is_available
+        if self.has_camera:
+            logging.info(f"Camera initialized ({self.camera.backend} backend) at reduced resolution for performance")
+        else:
+            logging.error("Error initializing camera: no backend could be opened")
             logging.warning("System will run with limited functionality without camera")
     
     def _setup_audio_devices(self):
@@ -436,20 +423,16 @@ class SmartGlasses:
             font = cv2.FONT_HERSHEY_SIMPLEX
             cv2.putText(mock_frame, "Camera Not Available", (100, 240), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
             return mock_frame
-            
-        # Check if we have PiCamera or webcam
-        if hasattr(self, 'picam'):
-            return self.picam.capture_array()
-        elif hasattr(self, 'video_capture'):
-            ret, frame = self.video_capture.read()
-            if ret:
-                return frame
-            else:
-                logging.warning("Failed to capture frame from webcam")
-                # Return a mock frame on failure
-                mock_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(mock_frame, "Camera Read Error", (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-                return mock_frame
+
+        frame = self.camera.read()
+        if frame is not None:
+            return frame
+
+        logging.warning(f"Failed to capture frame from camera ({self.camera.backend})")
+        # Return a mock frame on failure
+        mock_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(mock_frame, "Camera Read Error", (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        return mock_frame
     
     def load_model(self, model_name, model_path, loader_func):
         """Load ML model with memory management for Raspberry Pi"""
@@ -555,11 +538,11 @@ class SmartGlasses:
             except Exception as e:
                 logging.error(f"Error terminating PyAudio: {e}")
         
-        # Release camera resources
-        if hasattr(self, 'picam') and self.has_camera:
-            self.picam.stop()
-        elif hasattr(self, 'video_capture') and self.has_camera:
-            self.video_capture.release()
-            
+        # Release camera resources (Camera.close is safe to call when unavailable)
+        camera = getattr(self, 'camera', None)
+        if camera is not None:
+            camera.close()
+        self.has_camera = False
+
         cv2.destroyAllWindows()
         logging.info("Smart Glasses system shut down") 
