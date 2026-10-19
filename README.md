@@ -65,6 +65,8 @@ Status, stated plainly: the research core is implemented and tested, but it is n
 
 Software: Python 3.10+. Platform-specific dependencies are declared as optional extras in `pyproject.toml`: `.[pi]` for `picamera2`, `.[jetson]` for `jetson-stats`, and `.[face]` for `dlib` and `face_recognition`. `requirements.txt` remains for a plain `pip install -r`.
 
+**Jetson note:** the CSI camera is read through a GStreamer pipeline (`nvarguscamerasrc`), so OpenCV must be built with GStreamer support. The JetPack system package provides this (`sudo apt install python3-opencv`); the pip wheels `opencv-python` and `opencv-python-headless` do not. The install script handles this on a Jetson by taking OpenCV and numpy from apt, creating the venv with `--system-site-packages`, and installing the project with `pip install --no-deps` so no wheel shadows the system build. `netrr-doctor` reports whether the OpenCV it finds has GStreamer.
+
 ## Installation
 
 The quickest path is the install script, which detects the platform and installs the matching extras:

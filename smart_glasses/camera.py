@@ -23,8 +23,10 @@ from netrr.platform import (
     CAMERA_BACKEND_JETSON_GSTREAMER,
     CAMERA_BACKEND_OPENCV,
     CAMERA_BACKEND_PICAMERA2,
+    OPENCV_GSTREAMER_FIX,
     camera_backend_for,
     detect_platform,
+    opencv_has_gstreamer,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,8 +140,23 @@ class _JetsonGStreamerBackend(_OpenCVBackend):
         self._capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
         if not self._capture.isOpened():
             self._release()
-            raise RuntimeError("GStreamer pipeline could not be opened "
-                               "(is OpenCV built with GStreamer support?)")
+            if _cv2_has_gstreamer(cv2):
+                reason = ("GStreamer pipeline could not be opened; check that the "
+                          "CSI camera is connected and nvargus-daemon is running")
+            else:
+                reason = ("this OpenCV build has no GStreamer support, so the Jetson "
+                          "CSI camera cannot be opened. Fix: " + OPENCV_GSTREAMER_FIX)
+            logger.error("Jetson camera backend failed: %s. Falling back to a plain "
+                         "cv2.VideoCapture, which only works for a USB webcam.", reason)
+            raise RuntimeError(reason)
+
+
+def _cv2_has_gstreamer(cv2):
+    """True if this cv2 reports GStreamer in its build info; False on any error."""
+    try:
+        return opencv_has_gstreamer(cv2.getBuildInformation())
+    except Exception:
+        return False
 
 
 _BACKENDS = {

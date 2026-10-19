@@ -148,6 +148,35 @@ class TestCameraBackends(unittest.TestCase):
             self.assertEqual(len(_FakeCapture.opened_with), 2)
             cam.close()
 
+    def test_jetson_without_gstreamer_opencv_logs_the_fix(self):
+        """A pip-wheel cv2 (no GStreamer) must log the apt/WITH_GSTREAMER fix and fall through."""
+        _FakeCapture.should_open = staticmethod(lambda source: isinstance(source, int))
+        cv2 = _fake_cv2()
+        cv2.getBuildInformation = lambda: "  Video I/O:\n    GStreamer:  NO\n"
+        camera_mod.logger.disabled = False
+        with mock.patch.dict(sys.modules, {"cv2": cv2}), \
+                self.assertLogs(camera_mod.logger, level="ERROR") as logs:
+            cam = Camera(platform_info=_info("jetson", jetson=True))
+        self.assertEqual(cam.backend, "opencv")
+        text = "\n".join(logs.output)
+        self.assertIn("sudo apt install python3-opencv", text)
+        self.assertIn("WITH_GSTREAMER", text)
+        cam.close()
+
+    def test_jetson_with_gstreamer_opencv_but_no_camera_does_not_blame_the_build(self):
+        _FakeCapture.should_open = staticmethod(lambda source: isinstance(source, int))
+        cv2 = _fake_cv2()
+        cv2.getBuildInformation = lambda: "    GStreamer:  YES (1.20.3)\n"
+        camera_mod.logger.disabled = False
+        with mock.patch.dict(sys.modules, {"cv2": cv2}), \
+                self.assertLogs(camera_mod.logger, level="ERROR") as logs:
+            cam = Camera(platform_info=_info("jetson", jetson=True))
+        self.assertEqual(cam.backend, "opencv")
+        text = "\n".join(logs.output)
+        self.assertNotIn("python3-opencv", text)
+        self.assertIn("nvargus-daemon", text)
+        cam.close()
+
     def test_pi_uses_picamera2(self):
         with mock.patch.dict(sys.modules, {"picamera2": _fake_picamera2(), "cv2": _fake_cv2()}):
             cam = Camera(platform_info=_info("raspberry_pi", pi=True))

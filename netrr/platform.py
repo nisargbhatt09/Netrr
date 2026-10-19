@@ -123,5 +123,33 @@ def camera_backend_for(info):
     return CAMERA_BACKEND_OPENCV
 
 
+# The one actionable fix when OpenCV on a Jetson lacks GStreamer: the pip
+# wheels (opencv-python, opencv-python-headless) are built without it, the
+# JetPack system package is built with it.
+OPENCV_GSTREAMER_FIX = (
+    "install the JetPack system OpenCV with `sudo apt install python3-opencv` "
+    "(and use a venv created with --system-site-packages), or build OpenCV "
+    "with WITH_GSTREAMER=ON"
+)
+
+
+def opencv_has_gstreamer(build_info_string):
+    """True only if a cv2.getBuildInformation() string reports GStreamer: YES.
+
+    Pure and standard-library only. The build report contains a line such as
+    ``    GStreamer:                   YES (1.20.3)`` or ``    GStreamer: NO``
+    under "Video I/O". Anything other than a YES value (NO, a missing line,
+    an empty or non-string input) yields False.
+    """
+    if not isinstance(build_info_string, str):
+        return False
+    for line in build_info_string.splitlines():
+        key, sep, value = line.partition(":")
+        if not sep or key.strip().lower() != "gstreamer":
+            continue
+        return value.strip().upper().startswith("YES")
+    return False
+
+
 if __name__ == "__main__":
     print(detect_platform())

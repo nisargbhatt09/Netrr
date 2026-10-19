@@ -7,7 +7,14 @@ import unittest
 from unittest import mock
 
 from netrr import platform as nplatform
-from netrr.platform import PlatformInfo, camera_backend_for, detect_platform, read_text
+from netrr.platform import (
+    OPENCV_GSTREAMER_FIX,
+    PlatformInfo,
+    camera_backend_for,
+    detect_platform,
+    opencv_has_gstreamer,
+    read_text,
+)
 
 
 def _info(name, pi=False, jetson=False):
@@ -92,6 +99,64 @@ class TestDetectPlatform(unittest.TestCase):
         self.assertIn(info.name, {"raspberry_pi", "jetson", "linux", "macos", "windows", "unknown"})
         self.assertIsInstance(info.arch, str)
         self.assertRegex(info.python_version, r"^\d+\.\d+\.\d+$")
+
+
+JETPACK_BUILD_INFO = """
+General configuration for OpenCV 4.5.4 =====================================
+  Version control:               4.5.4
+
+  Video I/O:
+    DC1394:                      NO
+    FFMPEG:                      YES
+      avcodec:                   YES (58.134.100)
+    GStreamer:                   YES (1.16.3)
+    v4l/v4l2:                    YES (linux/videodev2.h)
+"""
+
+PIP_WHEEL_BUILD_INFO = """
+General configuration for OpenCV 4.10.0 =====================================
+  Video I/O:
+    DC1394:                      NO
+    FFMPEG:                      YES
+      avcodec:                   YES (59.37.100)
+    GStreamer:                   NO
+    v4l/v4l2:                    YES (linux/videodev2.h)
+"""
+
+
+class TestOpencvHasGstreamer(unittest.TestCase):
+    def test_jetpack_build_reports_yes(self):
+        self.assertTrue(opencv_has_gstreamer(JETPACK_BUILD_INFO))
+
+    def test_pip_wheel_reports_no(self):
+        self.assertFalse(opencv_has_gstreamer(PIP_WHEEL_BUILD_INFO))
+
+    def test_yes_without_version_suffix(self):
+        self.assertTrue(opencv_has_gstreamer("  GStreamer:  YES\n"))
+
+    def test_case_and_whitespace_insensitive(self):
+        self.assertTrue(opencv_has_gstreamer("gstreamer :   yes (1.20.3)"))
+        self.assertFalse(opencv_has_gstreamer("GSTREAMER:no"))
+
+    def test_missing_entry_is_false(self):
+        self.assertFalse(opencv_has_gstreamer("  Video I/O:\n    FFMPEG:  YES\n"))
+
+    def test_empty_and_non_string_are_false(self):
+        self.assertFalse(opencv_has_gstreamer(""))
+        self.assertFalse(opencv_has_gstreamer(None))
+        self.assertFalse(opencv_has_gstreamer(42))
+
+    def test_other_yes_lines_do_not_count(self):
+        """A YES on a different Video I/O line must not be mistaken for GStreamer."""
+        self.assertFalse(opencv_has_gstreamer("    FFMPEG: YES\n    GStreamer: NO\n    v4l/v4l2: YES\n"))
+
+    def test_mention_in_prose_is_not_an_entry(self):
+        """Only a `GStreamer: <value>` entry counts, not the word elsewhere."""
+        self.assertFalse(opencv_has_gstreamer("Built without GStreamer support: YES"))
+
+    def test_fix_message_names_the_apt_package_and_cmake_flag(self):
+        self.assertIn("sudo apt install python3-opencv", OPENCV_GSTREAMER_FIX)
+        self.assertIn("WITH_GSTREAMER", OPENCV_GSTREAMER_FIX)
 
 
 class TestReadText(unittest.TestCase):

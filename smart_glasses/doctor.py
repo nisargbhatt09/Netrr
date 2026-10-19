@@ -108,6 +108,38 @@ def check_dependencies(platform_info=None):
     return results
 
 
+def check_opencv_gstreamer(platform_info=None):
+    """Report whether the installed OpenCV was built with GStreamer support.
+
+    The Jetson CSI camera is only reachable through a GStreamer pipeline
+    (nvarguscamerasrc), so on a Jetson an OpenCV without GStreamer means no
+    camera. The pip wheels lack it; the JetPack `python3-opencv` has it.
+    Returns an empty list (check skipped) when cv2 cannot be imported, since
+    check_dependencies already reports that.
+    """
+    try:
+        import cv2
+    except Exception:
+        return []
+
+    from netrr.platform import OPENCV_GSTREAMER_FIX, opencv_has_gstreamer
+
+    try:
+        build_info = cv2.getBuildInformation()
+    except Exception as e:
+        return [(WARN, "OpenCV GStreamer", f"could not read cv2 build information ({e})")]
+
+    if opencv_has_gstreamer(build_info):
+        return [(OK, "OpenCV GStreamer", "built with GStreamer support")]
+
+    detail = "cv2 is built without GStreamer (pip wheels do not include it)"
+    if platform_info is not None and platform_info.is_jetson:
+        detail += f"; the Jetson CSI camera needs it. Fix: {OPENCV_GSTREAMER_FIX}"
+    else:
+        detail += "; only needed for the Jetson CSI camera"
+    return [(WARN, "OpenCV GStreamer", detail)]
+
+
 def check_camera(platform_info=None):
     """Find at least one usable camera backend."""
     if _spec_present("picamera2"):
@@ -211,7 +243,7 @@ def run_doctor(stream=None):
     sections = [
         ("System", check_python() + check_platform()),
         ("Dependencies", check_dependencies(platform_info)),
-        ("Camera", check_camera(platform_info)),
+        ("Camera", check_opencv_gstreamer(platform_info) + check_camera(platform_info)),
         ("Audio", check_audio()),
         ("API keys", check_api_keys()),
     ]
