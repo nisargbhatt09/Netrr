@@ -1,15 +1,30 @@
-opencv-python-headless
-dlib
-numpy
-ultralytics
+# Netrr — pinned deps for reproducibility.
+# Initial pins, to be reconciled against `pip freeze` in the project venv.
+
+# Core
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+ultralytics==8.3.0
+Pillow==10.4.0
+requests==2.32.3
+SpeechRecognition==3.10.4
+python-dotenv==1.0.1
+edge-tts==6.1.12
+psutil==5.9.8
+
+# LLM / VLM clients (pin after verifying against the installed SDK)
 mistralai
-Pillow
-requests
-SpeechRecognition
-face-recognition
-picamera2
-moondream
-python-dotenv
-edge-tts
-# For Linux, also install an audio player: mpg123, ffplay (ffmpeg), mplayer, aplay, or SoX (play)
-# sudo apt-get install mpg123  # recommended
+
+# Dev / evaluation
+pytest==8.3.3
+
+# Raspberry Pi only — no wheels on x86; install on target and pin there
+# dlib
+# face_recognition
+# picamera2
+
+# Optional VLM
+# moondream
+
+# Linux audio playback (system packages, not pip)
+# sudo apt-get install mpg123   # recommended
