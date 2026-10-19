@@ -15,7 +15,9 @@ The repository holds two things: a working prototype, and the dependency-free re
 | `eval/` | Evaluation harness. Runs a narrator backend over a fixed frame set and writes claim-level output as JSONL, with no camera or microphone involved. |
 | `frames/` | The fixed input set for the benchmark, seeded from the prototype images. |
 | `results/` | Harness output (gitignored). |
-| `tests/` | Unit tests for `netrr/`. |
+| `tests/` | Unit tests for `netrr/` and platform detection. |
+| `scripts/` | Platform-aware install script. |
+| `pyproject.toml` | Packaging: optional extras, and the `netrr` and `netrr-doctor` commands. |
 | `docs/` | Hardware setup guide. |
 | `archive/` | Superseded early scripts, kept for reference. |
 | `RESULTS.md` | Append-only log of every experiment. |
@@ -55,59 +57,70 @@ Status, stated plainly: the research core is implemented and tested, but it is n
 
 ## Requirements
 
-- A machine to run on. The prototype targets a **Raspberry Pi 4B (4 GB)**; it also runs on a laptop for development.
-- Raspberry Pi Camera Module V2 or a compatible webcam.
+- A machine to run on: a **Raspberry Pi 4B (4 GB)**, an **NVIDIA Jetson**, or a laptop for development.
+- Raspberry Pi Camera Module V2, a Jetson CSI camera, or a compatible webcam.
 - Microphone and speaker or headphones (both optional, with keyboard and text fallbacks).
 - Internet access for the cloud features.
 - API keys: Google Gemini (required for the migrated paths), Moondream for scene analysis, and optionally Google Cloud Vision for OCR.
 
-Software: Python 3.10+, and the packages in `requirements.txt`. Some are Raspberry Pi only (`picamera2`, `dlib`, `face_recognition`) and have no wheels on other platforms; they are commented out in `requirements.txt` and should be installed on the target device.
+Software: Python 3.10+. Platform-specific dependencies are declared as optional extras in `pyproject.toml`: `.[pi]` for `picamera2`, `.[jetson]` for `jetson-stats`, and `.[face]` for `dlib` and `face_recognition`. `requirements.txt` remains for a plain `pip install -r`.
 
 ## Installation
 
+The quickest path is the install script, which detects the platform and installs the matching extras:
+
 ```bash
-# Clone the repository
 git clone https://github.com/nisargbhatt09/Netrr.git
 cd Netrr
+./scripts/install.sh
+```
 
-# Create and activate a virtual environment
+Or install manually inside a virtual environment:
+
+```bash
 python3 -m venv venv
 source venv/bin/activate        # On Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+pip install -e .                # Raspberry Pi: pip install -e '.[pi]'
+                                # Jetson:       pip install -e '.[jetson]'
 
-# Configure API keys
-cp .env.example .env
-# Edit .env and fill in your keys
+cp .env.example .env            # then fill in your keys
 ```
 
-There is no packaging file in this repository, so install with `pip install -r requirements.txt` rather than `pip install -e .`.
+Confirm the environment before running:
+
+```bash
+netrr-doctor
+```
+
+`netrr-doctor` reports the detected platform, which dependencies are present, camera and audio availability, and whether your API keys are set. It exits non-zero only on a hard failure.
 
 ## Running the prototype
 
-`run.py` is the entry point. It passes its arguments straight through to the CLI.
+After `pip install -e .`, the `netrr` console command is available. `python -m smart_glasses` and `python run.py` are equivalent, and all three accept the same arguments.
 
 ```bash
 # Run everything (object detection, scene, text, face, voice)
-python run.py --mode all
+netrr --mode all
 
 # Run a single module
-python run.py --mode object
-python run.py --mode scene
-python run.py --mode text
-python run.py --mode face
-python run.py --mode voice
+netrr --mode object
+netrr --mode scene
+netrr --mode text
+netrr --mode face
+netrr --mode voice
 
 # Force hardware settings, useful for testing on a laptop
-python run.py --mode all --mic false --speaker false
+netrr --mode all --mic false --speaker false
 
 # Choose the detection model
-python run.py --mode object --model yoloe-11s-seg.pt
+netrr --mode object --model yoloe-11s-seg.pt
 
 # Control logging
-python run.py --mode all --log-file custom.log --log-level DEBUG
+netrr --mode all --log-file custom.log --log-level DEBUG
 ```
+
+From the repository root, `python -m smart_glasses --mode all` and `python run.py --mode all` do the same thing.
 
 ### Keyboard commands
 
