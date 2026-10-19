@@ -5,75 +5,92 @@ import pickle
 import threading
 import time
 import json
+import logging
 from datetime import datetime
+from .base import SmartGlasses
+
+logger = logging.getLogger(__name__)
+
+# The face_recognition package needs dlib, a native library that is often not
+# installed (or not installable) on the target device. Everything in this
+# module degrades to a no-op when it is missing instead of raising.
 try:
     import face_recognition
     FACE_RECOGNITION_AVAILABLE = True
 except ImportError:
-    print("face_recognition module not available - face recognition features will be disabled")
+    logger.warning("face_recognition module not available (requires the dlib and "
+                   "face_recognition packages) - face recognition features will be disabled")
     FACE_RECOGNITION_AVAILABLE = False
-from .base import SmartGlasses
+
+UNAVAILABLE_MESSAGE = "Face recognition is not available on this device"
 
 class FaceRecognizer(SmartGlasses):
     """Face recognition, person identification, emotion detection, and name learning"""
-    
+
     def __init__(self, config=None, face_db_path="face_database.pkl", metadata_path="face_metadata.json"):
         # Initialize the base class
         super().__init__(config)
-        
-        # Check if face_recognition is available
-        self.face_recognition_available = FACE_RECOGNITION_AVAILABLE
-        if not self.face_recognition_available:
-            print("Face recognition functionality is disabled")
-            return
-        
+
         # Paths for face database and metadata
         self.face_db_path = face_db_path
         self.metadata_path = metadata_path
-        
+
+        # Safe defaults so every method works (as a no-op) even when the
+        # library is missing and the rest of __init__ is skipped.
+        self.known_faces = {}
+        self.face_metadata = {}
+        self.learning_mode = False
+        self.new_face_name = None
+        self.new_face_encoding = None
+        self.emotion_model_loaded = False
+
+        # Check if face_recognition is available
+        self.face_recognition_available = FACE_RECOGNITION_AVAILABLE
+        if not self.face_recognition_available:
+            logger.warning("Face recognition functionality is disabled: the face_recognition "
+                           "and dlib packages are not installed")
+            return
+
         # Load or create face database
         if os.path.exists(face_db_path):
             with open(face_db_path, 'rb') as f:
                 self.known_faces = pickle.load(f)
-            print(f"Loaded {len(self.known_faces)} known faces from database")
+            logger.info(f"Loaded {len(self.known_faces)} known faces from database")
         else:
-            self.known_faces = {}
-            print("Created new face database")
-        
+            logger.info("Created new face database")
+
         # Load or create metadata
         if os.path.exists(metadata_path):
             with open(metadata_path, 'r') as f:
                 self.face_metadata = json.load(f)
-            print(f"Loaded metadata for {len(self.face_metadata)} persons")
+            logger.info(f"Loaded metadata for {len(self.face_metadata)} persons")
         else:
-            self.face_metadata = {}
-            print("Created new face metadata storage")
-        
+            logger.info("Created new face metadata storage")
+
         # Face detection parameters
         self.detection_interval = 0.5  # seconds between detection attempts
         self.last_detection_time = 0
-        
+
         # Recognition settings
         self.face_recognition_tolerance = 0.6  # Lower is more strict
-        
+
         # Emotion labels
         self.emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
-        
+
         # Load emotion detection model (placeholder, you would need a real model)
         # self.emotion_model = load_emotion_model()
-        self.emotion_model_loaded = False
-        
-        # State for learning new faces
-        self.learning_mode = False
-        self.new_face_name = None
-        self.new_face_encoding = None
-        
-        print("Face recognizer initialized")
-    
+
+        logger.info("Face recognizer initialized")
+
+    def _unavailable(self):
+        """Log and announce that face recognition cannot be used."""
+        logger.warning("Face recognition requested but the face_recognition/dlib packages are not installed")
+        self.speak(UNAVAILABLE_MESSAGE)
+
     def detect_faces(self, frame):
         """Detect faces in the frame"""
         if not self.face_recognition_available:
-            self.speak("Face recognition not available")
+            self._unavailable()
             return [], None
             
         # Convert to RGB for face_recognition library
@@ -87,7 +104,7 @@ class FaceRecognizer(SmartGlasses):
     def recognize_faces(self, frame):
         """Detect and recognize faces in the frame"""
         if not self.face_recognition_available:
-            self.speak("Face recognition not available")
+            self._unavailable()
             return frame
             
         current_time = time.time()
@@ -184,7 +201,7 @@ class FaceRecognizer(SmartGlasses):
     def learn_face(self, name, face_encoding):
         """Learn a new face and associate with the given name"""
         if not self.face_recognition_available:
-            self.speak("Face recognition not available")
+            self._unavailable()
             return False
             
         if name in self.known_faces:
@@ -196,13 +213,13 @@ class FaceRecognizer(SmartGlasses):
         with open(self.face_db_path, 'wb') as f:
             pickle.dump(self.known_faces, f)
         
-        print(f"Learned face for {name}")
+        logger.info(f"Learned face for {name}")
         return True
-    
+
     def start_learning_mode(self, name):
         """Start the process of learning a new face"""
         if not self.face_recognition_available:
-            self.speak("Face recognition not available")
+            self._unavailable()
             return False
             
         self.learning_mode = True
@@ -231,11 +248,17 @@ class FaceRecognizer(SmartGlasses):
     
     def save_metadata(self):
         """Save person metadata to file"""
+        if not self.face_recognition_available:
+            return
         with open(self.metadata_path, 'w') as f:
             json.dump(self.face_metadata, f, indent=2)
-    
+
     def add_note_to_person(self, name, note):
         """Add a note about a person to their metadata"""
+        if not self.face_recognition_available:
+            self._unavailable()
+            return False
+
         if name in self.face_metadata:
             if "notes" not in self.face_metadata[name]:
                 self.face_metadata[name]["notes"] = ""
@@ -250,6 +273,10 @@ class FaceRecognizer(SmartGlasses):
     
     def get_person_info(self, name):
         """Get information about a known person"""
+        if not self.face_recognition_available:
+            self._unavailable()
+            return None
+
         if name in self.face_metadata:
             info = self.face_metadata[name]
             
@@ -282,7 +309,7 @@ class FaceRecognizer(SmartGlasses):
     def delete_person(self, name):
         """Delete a person from the face database and metadata"""
         if not self.face_recognition_available:
-            self.speak("Face recognition not available")
+            self._unavailable()
             return False
             
         # Check if the person exists
@@ -299,39 +326,45 @@ class FaceRecognizer(SmartGlasses):
                 self.save_metadata()
                 
             self.speak(f"Deleted {name} from the recognition system")
-            print(f"Deleted {name} from the face database")
+            logger.info(f"Deleted {name} from the face database")
             return True
         else:
             self.speak(f"I don't know anyone named {name}")
             return False
-            
+
     def list_known_people(self):
         """List all known people in the database"""
+        if not self.face_recognition_available:
+            self._unavailable()
+            return []
+
         if not self.known_faces:
             self.speak("No faces in the database")
-            print("No faces in the database")
+            logger.info("No faces in the database")
             return []
-            
+
         known_people = list(self.known_faces.keys())
         self.speak(f"I know {len(known_people)} people: {', '.join(known_people)}")
-        print("\nKnown people in database:")
+        logger.info("Known people in database:")
         for person in known_people:
             encounters = self.face_metadata.get(person, {}).get("encounters", 0)
-            print(f"- {person} (seen {encounters} times)")
+            logger.info(f"- {person} (seen {encounters} times)")
         return known_people
-        
+
     def run_face_recognition_loop(self):
         """Main face recognition loop"""
+        if not self.face_recognition_available:
+            logger.error("Cannot start the face recognition loop: the face_recognition and dlib "
+                         "packages are not installed (pip install -e '.[face]')")
+            self.speak(UNAVAILABLE_MESSAGE)
+            return
+
         try:
             # Display available commands
-            print("\nFace Recognition Keyboard Commands:")
-            print("  r - Remember new face (add to database)")
-            print("  d - Delete a person from recognition system")
-            print("  l - List all known people")
-            print("  i - Get info about a known person")
-            print("  n - Add a note about a person")
-            print("  q - Quit\n")
-            
+            logger.info("Face Recognition Keyboard Commands: "
+                        "r - Remember new face | d - Delete a person | l - List known people | "
+                        "i - Get info about a person | n - Add a note | q - Quit")
+
             self.speak("Face recognition active. Press 'r' to remember a new face.")
             
             # State for keyboard input
@@ -468,6 +501,6 @@ class FaceRecognizer(SmartGlasses):
                     input_mode = None
                     
         except KeyboardInterrupt:
-            print("Face recognition stopped by user")
+            logger.info("Face recognition stopped by user")
         finally:
             cv2.destroyAllWindows() 

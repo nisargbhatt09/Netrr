@@ -576,24 +576,35 @@ class VoiceAssistant(SmartGlasses):
         else:
             self.speak("Text reader not available")
     
+    FACE_UNAVAILABLE_MESSAGE = ("Face recognition is not available on this device. "
+                                "The face recognition packages are not installed.")
+
+    def _face_recognizer_ready(self):
+        """True when a face recognizer is wired in and its native library loaded."""
+        return (self.face_recognizer is not None
+                and getattr(self.face_recognizer, "face_recognition_available", False))
+
     def cmd_identify_person(self, param):
         """Command to identify a person"""
-        if self.face_recognizer:
-            self.speak("Looking for faces")
-            frame = self.capture_frame()
-            if frame is not None:
-                self.face_recognizer.recognize_faces(frame)
-            else:
-                self.speak("Cannot capture image from camera")
+        if not self._face_recognizer_ready():
+            self.speak(self.FACE_UNAVAILABLE_MESSAGE)
+            return
+        self.speak("Looking for faces")
+        frame = self.capture_frame()
+        if frame is not None:
+            self.face_recognizer.recognize_faces(frame)
         else:
-            self.speak("Face recognizer not available")
-    
+            self.speak("Cannot capture image from camera")
+
     def cmd_remember_person(self, param):
         """Command to remember a new person"""
-        if self.face_recognizer and param:
+        if not self._face_recognizer_ready():
+            self.speak(self.FACE_UNAVAILABLE_MESSAGE)
+            return
+        if param:
             self.face_recognizer.start_learning_mode(param)
         else:
-            self.speak("Please specify a name to remember, or face recognizer is not available")
+            self.speak("Please specify a name to remember, for example 'remember Alice'")
     
     def cmd_identify_color(self, param):
         """Command to identify the dominant color"""
@@ -625,10 +636,13 @@ class VoiceAssistant(SmartGlasses):
     
     def cmd_tell_about(self, param):
         """Command to tell about a known person"""
-        if self.face_recognizer and param:
+        if not self._face_recognizer_ready():
+            self.speak(self.FACE_UNAVAILABLE_MESSAGE)
+            return
+        if param:
             self.face_recognizer.get_person_info(param)
         else:
-            self.speak("Please specify a name, or face recognizer is not available")
+            self.speak("Please specify a name, for example 'tell me about Alice'")
     
     def cmd_start_conversation(self, param):
         """Command to start conversation mode"""

@@ -6,3 +6,6 @@ __pycache__
 results/
 *.egg-info/
 venv/
+# Face recognition runtime artifacts
+face_database.pkl
+face_metadata.json

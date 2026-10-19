@@ -20,6 +20,12 @@ except ImportError:
     logging.warning("Face recognition module not available")
     FACE_RECOGNITION_AVAILABLE = False
 
+FACE_UNAVAILABLE_MESSAGE = (
+    "Face recognition is unavailable: the face_recognition and dlib packages are not "
+    "installed. Face features are disabled; every other mode still works. "
+    "Install them with: pip install -e '.[face]'"
+)
+
 try:
     from .scene_analyzer import SceneAnalyzer
     SCENE_ANALYZER_AVAILABLE = True
@@ -34,9 +40,50 @@ except ImportError:
     logging.warning("Voice assistant module not available")
     VOICE_ASSISTANT_AVAILABLE = False
 
+def list_audio_devices(stream=None):
+    """Print every audio device with its index, input and output channel counts.
+
+    Used by `--list-audio` to find the right `--audio-input-device` /
+    `--audio-output-device` index (e.g. for a bluetooth headset). Returns the
+    number of devices listed, or None when pyaudio is not installed.
+    """
+    import sys
+    stream = stream or sys.stdout
+    try:
+        import pyaudio
+    except ImportError:
+        print("pyaudio is not installed, so audio devices cannot be listed.", file=stream)
+        print("Install it with: pip install pyaudio (on Linux first: sudo apt install portaudio19-dev)",
+              file=stream)
+        return None
+
+    p = pyaudio.PyAudio()
+    try:
+        count = p.get_device_count()
+        print("\n=== AVAILABLE AUDIO DEVICES ===", file=stream)
+        print("{:<5} {:<40} {:<10} {:<10}".format("Index", "Name", "Inputs", "Outputs"), file=stream)
+        print("-" * 65, file=stream)
+        for i in range(count):
+            dev = p.get_device_info_by_index(i)
+            print("{:<5} {:<40} {:<10} {:<10}".format(
+                i,
+                str(dev.get('name', ''))[:39],
+                dev.get('maxInputChannels', 0),
+                dev.get('maxOutputChannels', 0)
+            ), file=stream)
+        if count == 0:
+            print("(no audio devices found)", file=stream)
+        print("\nUse the index with --audio-input-device / --audio-output-device.", file=stream)
+    finally:
+        p.terminate()
+    return count
+
+
 def main():
     """Main application entry point"""
     parser = argparse.ArgumentParser(description="Smart AI Glasses for the Visually Impaired")
+    parser.add_argument("--list-audio", action="store_true",
+                       help="List audio input/output devices with their indices and exit")
     parser.add_argument("--mode", type=str, default="all", choices=["all", "object", "text", "face", "scene", "voice"],
                        help="Operating mode to run (default: all)")
     parser.add_argument("--api-key", type=str, default=None, help="Gemini API key")
@@ -59,7 +106,12 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     
     args = parser.parse_args()
-    
+
+    # Utility flags that exit without starting any module
+    if args.list_audio:
+        list_audio_devices()
+        return
+
     # Configure logging
     log_level = getattr(logging, args.log_level)
     logging.basicConfig(
@@ -130,10 +182,15 @@ def main():
             
         # Initialize face recognition module
         # We need this for voice mode too
-        if args.mode in ["all", "face", "voice"] and FACE_RECOGNITION_AVAILABLE:
-            logging.info("Initializing face recognition module...")
-            modules["face_recognizer"] = FaceRecognizer(config)
-            active_modules.append("face_recognizer")
+        if args.mode in ["all", "face", "voice"]:
+            if FACE_RECOGNITION_AVAILABLE:
+                logging.info("Initializing face recognition module...")
+                modules["face_recognizer"] = FaceRecognizer(config)
+                active_modules.append("face_recognizer")
+            elif args.mode == "face":
+                logging.error(FACE_UNAVAILABLE_MESSAGE)
+            else:
+                logging.warning(FACE_UNAVAILABLE_MESSAGE)
             
         # Initialize scene analysis module
         # We need this for voice mode too

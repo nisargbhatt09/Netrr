@@ -108,6 +108,21 @@ def check_dependencies(platform_info=None):
     return results
 
 
+def check_face_recognition():
+    """Report whether the optional face recognition stack is usable.
+
+    `face_recognition` depends on `dlib`, a native library that is often not
+    installed. When it is missing the glasses still start; only the face
+    features are disabled. The import happens here, not at module load.
+    """
+    ok, detail = _try_import("face_recognition")
+    if ok:
+        return [(OK, "Face recognition", f"face_recognition {detail}")]
+    return [(WARN, "Face recognition",
+             f"{detail}; requires the dlib and face_recognition packages "
+             "(pip install -e '.[face]'). Face features will be disabled")]
+
+
 def check_opencv_gstreamer(platform_info=None):
     """Report whether the installed OpenCV was built with GStreamer support.
 
@@ -242,7 +257,7 @@ def run_doctor(stream=None):
 
     sections = [
         ("System", check_python() + check_platform()),
-        ("Dependencies", check_dependencies(platform_info)),
+        ("Dependencies", check_dependencies(platform_info) + check_face_recognition()),
         ("Camera", check_opencv_gstreamer(platform_info) + check_camera(platform_info)),
         ("Audio", check_audio()),
         ("API keys", check_api_keys()),

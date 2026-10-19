@@ -1,6 +1,8 @@
-"""Unit tests for the OpenCV/GStreamer check in smart_glasses.doctor.
+"""Unit tests for the OpenCV/GStreamer and face recognition checks in
+smart_glasses.doctor.
 
-cv2 is replaced with a fake in sys.modules so the check runs on any host.
+cv2 and face_recognition are replaced with fakes in sys.modules so the checks
+run on any host.
 """
 
 import sys
@@ -59,6 +61,28 @@ class TestCheckOpencvGstreamer(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"cv2": cv2}):
             results = doctor.check_opencv_gstreamer(_info("jetson", jetson=True))
         self.assertEqual(results[0][0], doctor.WARN)
+
+
+class TestCheckFaceRecognition(unittest.TestCase):
+    def test_warn_naming_dlib_when_import_fails(self):
+        with mock.patch.dict(sys.modules, {"face_recognition": None}):
+            results = doctor.check_face_recognition()
+        self.assertEqual(len(results), 1)
+        status, label, detail = results[0]
+        self.assertEqual(status, doctor.WARN)
+        self.assertEqual(label, "Face recognition")
+        self.assertIn("dlib", detail)
+        self.assertIn("face_recognition", detail)
+
+    def test_ok_when_import_succeeds(self):
+        fake = types.ModuleType("face_recognition")
+        fake.__version__ = "1.3.0"
+        with mock.patch.dict(sys.modules, {"face_recognition": fake}):
+            results = doctor.check_face_recognition()
+        self.assertEqual(len(results), 1)
+        status, _, detail = results[0]
+        self.assertEqual(status, doctor.OK)
+        self.assertIn("1.3.0", detail)
 
 
 if __name__ == "__main__":
